@@ -69,10 +69,36 @@ void Device_Camera::Init_Camera(const int _width,const int _height,const int _bu
 
 	memset(&fmt,0,sizeof(fmt));
 	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_BGR666;
+	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_BGR24;
 	fmt.fmt.pix.width = mwidth;
 	fmt.fmt.pix.height = mheight;
 	ioctl(fd,VIDIOC_S_FMT,&fmt);
+
+
+/////Check whether support 
+
+
+
+
+
+
+	struct v4l2_fmtdesc fmtdesc;  
+	fmtdesc.index=0;  
+	fmtdesc.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;  
+	while(ioctl(fd,VIDIOC_ENUM_FMT,&fmtdesc)!=-1)  
+	{  
+		if(fmtdesc.pixelformat & fmt.fmt.pix.pixelformat)  
+		{  
+			printf("format:%s\n",fmtdesc.description);  
+			break;  
+		}  
+		fmtdesc.index++;  
+	}  
+
+/////Check whether support 
+
+
+
 
 	struct v4l2_requestbuffers req;
 	req.count = _buffernum;
@@ -178,7 +204,6 @@ int main()
 	while(true)
 	{
 		TYPE *data = (TYPE *)malloc(sizeof(TYPE)*Width*Height*Per);
-		
 
 		dc.Pop_Frame(data);
 		
@@ -187,32 +212,65 @@ int main()
 		cv::Mat src_img(Height,Width,CV_8UC3);
 
 
-		for(int i=0;i<Height;i++)
+	
+		int index = 0;
+		int row; int col;
+		for(int i=0;i<640*480*2;i+=4)
 		{
-			for(int j=0;j<Width;j++)
-			{
-				src_img.at<uchar>(i,j*3) = data[i*Width*Per+j*Per];	
-				src_img.at<uchar>(i,j*3+1) = data[i*Width*Per+j*Per];	
-				src_img.at<uchar>(i,j*3+2) = data[i*Width*Per+j*Per];	
-			}
-		}
+			int y0 = data[i];
+			int u = data[i+1];
+			int y1 = data[i+2];
+			int v = data[i+3];
+			
+			int R = y0 + 1.13983 *(v-128);
+			int G = y0 - 0.39465 *(u-128) -0.58060*(v-128);
+			int B = y0 + 2.03211 *(u-128);
+
+			R = std::max(std::min(255,R),0); 
+			G = std::max(std::min(255,G),0); 
+			B = std::max(std::min(255,B),0); 
 		
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = B;
+			++index;
+
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = G;
+			++index;
+
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = R;
+			++index;
+			
+			R = y1 + 1.13983 *(v-128);
+			G = y1 - 0.39465 *(u-128) -0.58060*(v-128);
+			B = y1 + 2.03211 *(u-128);
+
+			R = std::max(std::min(255,R),0); 
+			G = std::max(std::min(255,G),0); 
+			B = std::max(std::min(255,B),0); 
+
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = B;
+			++index;
+
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = G;
+			++index;
+
+			row = index / (640*3);
+			col = index % (640*3);
+			src_img.at<uchar>(row,col) = R;
+			++index;
+		}
 		cv::imshow("wemaefox",src_img);
 		
 		cv::waitKey(1);
-		/* std::string filename(""); */
-		/* filename += "weamdefox"; */
-		/* filename += IntToString(i); */
-		/* filename += ".jpg"; */
-
-		/* std::ofstream on; */
-		/* on.open(filename); */
-		/* for(int i=0;i<640*480*2;i++) */
-		/* { */
-		/* 	on<<data[i]; */
-		/* } */
-
-		/* on.close(); */
 
 		free(data);
 	}
