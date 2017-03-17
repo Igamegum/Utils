@@ -283,6 +283,37 @@ unsigned char *Flip_BGR(const int width,const int height,unsigned char *data)
 	return ans;
 }
 
+void DrawRect(const int width,const int height,unsigned char *data,int sx,int sy,int endx,int endy)
+{
+	
+	int n_width = endx - sx+1;
+	int n_height = endy - sy+1;
+
+	assert(n_width>0 && n_height>0 && sx>=0 && endx<width && sy>=0 && endy<height);
+
+	for(int i=sy;i<=endy;i++)
+	{
+		data[i*width*3+sx*3] = 113;
+		data[i*width*3+sx*3+1] = 179;
+		data[i*width*3+sx*3+2] = 60;
+
+		data[i*width*3+endx*3] = 113;
+		data[i*width*3+endx*3+1] = 179;
+		data[i*width*3+endx*3+2] = 60;
+
+	}
+	for(int i=sx;i<=endx;i++) 
+	{
+		data[sy*width*3+i*3] = 113;
+		data[sy*width*3+i*3+1] = 179;
+		data[sy*width*3+i*3+2] = 60;
+
+		data[endy*width*3+i*3] = 113;
+		data[endy*width*3+i*3+1] = 179;
+		data[endy*width*3+i*3+2] = 60;
+	}
+	
+}
 unsigned char *Crop_Image(const int width,const int height,unsigned char *data,int sx,int sy,int endx,int endy)
 {
 	int n_width = endx - sx+1;
@@ -328,6 +359,7 @@ int main()
 		dc.Push_Frame((dc.v4l2_buf.index));
 
 		unsigned char *ans = YUYV2BGR(640,480,data);
+		DrawRect(640,480,ans,100,100,600,400);
 		BGR2MAT(640,480,ans);
 
 //		unsigned char *wemadefox =Flip_BGR(640,480,ans);		
