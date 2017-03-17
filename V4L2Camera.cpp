@@ -187,6 +187,124 @@ const int Width = 640;
 const int Height = 480;
 const int Per = 2;
 
+unsigned char *YUYV2BGR(const int width,const int height,unsigned char *data)
+{
+	unsigned char *bgr = (unsigned char *)malloc(height * width *3 *sizeof(unsigned char));
+	int index = 0;
+	int row; int col;
+	for(int i=0;i<width*height*2;i+=4)
+	{
+		int y0 = data[i];
+		int u = data[i+1];
+		int y1 = data[i+2];
+		int v = data[i+3];
+
+		int R = y0 + 1.13983 *(v-128);
+		int G = y0 - 0.39465 *(u-128) -0.58060*(v-128);
+		int B = y0 + 2.03211 *(u-128);
+
+		R = std::max(std::min(255,R),0); 
+		G = std::max(std::min(255,G),0); 
+		B = std::max(std::min(255,B),0); 
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = B;
+		++index;
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = G;
+		++index;
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = R;
+		++index;
+
+		R = y1 + 1.13983 *(v-128);
+		G = y1 - 0.39465 *(u-128) -0.58060*(v-128);
+		B = y1 + 2.03211 *(u-128);
+
+		R = std::max(std::min(255,R),0); 
+		G = std::max(std::min(255,G),0); 
+		B = std::max(std::min(255,B),0); 
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = B;
+		++index;
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = G;
+		++index;
+
+		row = index / (width*3);
+		col = index % (width*3);
+		bgr[index] = R;
+		++index;
+
+	}
+	return bgr;
+}
+
+
+void BGR2MAT(const int width,const int height,unsigned char *data)
+{
+
+	cv::Mat src_img(height,width,CV_8UC3);
+	int row;int col;
+	for(int i=0;i<height * width *3;i++)
+	{
+		row = i/(width*3);
+		col = i%(width*3);
+		src_img.at<uchar>(row,col) = data[i];
+	}
+	cv::imshow("wemaefox",src_img);
+	cv::waitKey(1);
+}
+
+unsigned char *Flip_BGR(const int width,const int height,unsigned char *data)
+{
+	unsigned char *ans = (unsigned char *) malloc(width * height *3*sizeof(unsigned char));
+	int index = 0;
+
+	for(int i=0;i<width;i++)
+	{
+		for(int j=height-1;j>=0;j--)
+		{
+			ans[index] = data[j*width*3+i*3]; index++;
+			ans[index] = data[j*width*3+i*3+1]; index++;
+			ans[index] = data[j*width*3+i*3+2]; index++;
+		}
+	}
+
+	return ans;
+}
+
+unsigned char *Crop_Image(const int width,const int height,unsigned char *data,int sx,int sy,int endx,int endy)
+{
+	int n_width = endx - sx+1;
+	int n_height = endy - sy+1;
+
+	assert(n_width>0 && n_height>0 && sx>=0 && endx<width && sy>=0 && endy<height);
+
+	unsigned char *ans = (unsigned char *)malloc(n_width * n_height *3*sizeof(unsigned char));
+
+	int index = 0;
+	for(int i=sy;i<=endy;i++)	
+	{
+		for(int j=sx;j<=endx;j++)
+		{
+			ans[index] = data[i*width*3+j*3];index++;
+			ans[index] = data[i*width*3+j*3+1];index++;
+			ans[index] = data[i*width*3+j*3+2];index++;
+		}
+	}
+
+	return ans;
+}
 int main()
 {
 
@@ -209,73 +327,18 @@ int main()
 		
 		dc.Push_Frame((dc.v4l2_buf.index));
 
-		cv::Mat src_img(Height,Width,CV_8UC3);
+		unsigned char *ans = YUYV2BGR(640,480,data);
+		BGR2MAT(640,480,ans);
 
-
-	
-		int index = 0;
-		int row; int col;
-		for(int i=0;i<640*480*2;i+=4)
-		{
-			int y0 = data[i];
-			int u = data[i+1];
-			int y1 = data[i+2];
-			int v = data[i+3];
-			
-			int R = y0 + 1.13983 *(v-128);
-			int G = y0 - 0.39465 *(u-128) -0.58060*(v-128);
-			int B = y0 + 2.03211 *(u-128);
-
-			R = std::max(std::min(255,R),0); 
-			G = std::max(std::min(255,G),0); 
-			B = std::max(std::min(255,B),0); 
-		
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = B;
-			++index;
-
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = G;
-			++index;
-
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = R;
-			++index;
-			
-			R = y1 + 1.13983 *(v-128);
-			G = y1 - 0.39465 *(u-128) -0.58060*(v-128);
-			B = y1 + 2.03211 *(u-128);
-
-			R = std::max(std::min(255,R),0); 
-			G = std::max(std::min(255,G),0); 
-			B = std::max(std::min(255,B),0); 
-
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = B;
-			++index;
-
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = G;
-			++index;
-
-			row = index / (640*3);
-			col = index % (640*3);
-			src_img.at<uchar>(row,col) = R;
-			++index;
-		}
-		cv::imshow("wemaefox",src_img);
-		
-		cv::waitKey(1);
+//		unsigned char *wemadefox =Flip_BGR(640,480,ans);		
+//		BGR2MAT(480,640,wemadefox);
+//
+//		unsigned char *crop = Crop_Image(640,480,ans,100,100,600,400);
+//		BGR2MAT(501,301,crop);
 
 		free(data);
 	}
 	
-	std::cout<<"Final"<<std::endl;
 
 	return 0;
 }
