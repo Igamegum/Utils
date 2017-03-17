@@ -77,11 +77,6 @@ void Device_Camera::Init_Camera(const int _width,const int _height,const int _bu
 
 /////Check whether support 
 
-
-
-
-
-
 	struct v4l2_fmtdesc fmtdesc;  
 	fmtdesc.index=0;  
 	fmtdesc.type=V4L2_BUF_TYPE_VIDEO_CAPTURE;  
@@ -336,12 +331,150 @@ unsigned char *Crop_Image(const int width,const int height,unsigned char *data,i
 
 	return ans;
 }
+
+typedef struct
+{
+	int B;int R;int G;
+}Color;
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+inline int Fast_MulI( int a, int b)
+{
+	int res = 0;
+	while(b) 
+	{
+		if(b&1) res = res + a;
+		b>>=1;
+		a<<=1; 
+	}
+	return res; 
+}
+
+inline double Fast_MulD(double a,int b)
+{
+	double res;
+	while(b)
+	{
+		if(b&1) res = res + a;
+		b>>=1;
+		a*=2.0;
+	}
+	return res;
+}
+Color FastGetColor(unsigned char *data, int x, int y,const int width,const int height)
+{
+	x = std::max(std::min(x,width-1),0);
+	y = std::max(std::min(y,height-1),0);
+
+	Color ans;
+	int index = Fast_MulI(y,width);
+//	int index = y*width;
+//	index = Fast_MulI(index,3);
+	index *=3;
+
+//	int baseR = Fast_MulI(x,3);
+	int baseR = x*3;
+
+	ans.B = data[index+baseR];
+	ans.G = data[index+baseR+1];
+	ans.R = data[index+baseR+2];
+
+	return ans;
+	
+}
+Color FastInsertValue(unsigned char *data,const int x,const int y,const double w_rate,const double h_rate,const int width,const int height)
+{
+	Color ans;
+
+	Color color00 = FastGetColor(data,x,y,width,height); 
+	Color color10 = FastGetColor(data,x+1,y,width,height); 
+	Color color01 = FastGetColor(data,x,y+1,width,height); 
+	Color color11 = FastGetColor(data,x+1,y+1,width,height); 
+
+	double p1 = (1-w_rate)*(1-h_rate);
+	double p2 = (1-w_rate)*(h_rate);
+	double p3 = (w_rate)*(1-h_rate);
+	double p4 = (w_rate)*(h_rate);
+
+	ans.B = Fast_MulD(p1,color00.B) + Fast_MulD(p2,color01.B)+
+			Fast_MulD(p3,color10.B)+ Fast_MulD(p4,color11.B);
+
+	ans.G = Fast_MulD(p1,color00.G) + Fast_MulD(p2,color01.G)+
+			Fast_MulD(p3,color10.G)+ Fast_MulD(p4,color11.G);
+
+	ans.R = Fast_MulD(p1,color00.R) + Fast_MulD(p2,color01.R)+
+			Fast_MulD(p3,color10.R)+ Fast_MulD(p4,color11.R);
+	return ans;
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+//
+
+Color GetColor(unsigned char *data, int x, int y,const int width,const int height)
+{
+	x = std::max(std::min(x,width-1),0);
+	y = std::max(std::min(y,height-1),0);
+
+	Color ans;
+	ans.B = data[y*width*3+x*3];
+	ans.G = data[y*width*3+x*3+1];
+	ans.R = data[y*width*3+x*3+2];
+
+	return std::move(ans);
+	
+}
+Color InsertValue(unsigned char *data,const int x,const int y,const double w_rate,const double h_rate,const int width,const int height)
+{
+	Color ans;
+
+	Color color00 = GetColor(data,x,y,width,height); 
+	Color color10 = GetColor(data,x+1,y,width,height); 
+	Color color01 = GetColor(data,x,y+1,width,height); 
+	Color color11 = GetColor(data,x+1,y+1,width,height); 
+
+	ans.B = (1-w_rate)*(1-h_rate)*color00.B + (1-w_rate)*h_rate*color01.B+
+			w_rate*(1-h_rate)*color10.B+w_rate*h_rate*color11.B;
+
+	ans.G = (1-w_rate)*(1-h_rate)*color00.G + (1-w_rate)*h_rate*color01.G+
+			w_rate*(1-h_rate)*color10.G+w_rate*h_rate*color11.G;
+
+	ans.R = (1-w_rate)*(1-h_rate)*color00.R + (1-w_rate)*h_rate*color01.R+
+			w_rate*(1-h_rate)*color10.R+w_rate*h_rate*color11.R;
+	return ans;
+}
+
+unsigned char * Resize(const int width,const int height,unsigned char *data,const int re_width,const int re_height)
+{
+
+	double w_rate = re_width*1.0/width;
+	double h_rate = re_height*1.0/height;
+
+	unsigned char * wemadefox = (unsigned char *)malloc(re_height * re_width *3 *sizeof(unsigned char));
+
+	int index = 0;
+	for(int i=0;i<re_height;i++)
+	{
+		for(int j=0;j<re_width;j++)
+		{
+			int origin_x = (j/w_rate);
+			int origin_y = (i/h_rate);
+
+			Color ans = InsertValue(data,origin_x,origin_y,w_rate,h_rate,width,height); 
+
+			wemadefox[index] = ans.B; index++;
+			wemadefox[index] = ans.G; index++;
+			wemadefox[index] = ans.R; index++;
+		}
+	}
+
+	return wemadefox;
+}
+
 int main()
 {
 
 
 	Device_Camera dc;
-
 
 	dc.Open_Camera();
 	dc.Init_Camera(Width,Height,10);
@@ -349,6 +482,8 @@ int main()
 
 
 	std::cout<<"Frame Size:"<<dc.v4l2_buf.length<<std::endl;
+	
+	long long st,ed;
 
 	while(true)
 	{
@@ -359,18 +494,28 @@ int main()
 		dc.Push_Frame((dc.v4l2_buf.index));
 
 		unsigned char *ans = YUYV2BGR(640,480,data);
-		DrawRect(640,480,ans,100,100,600,400);
-		BGR2MAT(640,480,ans);
+//		BGR2MAT(640,480,ans);
+
+//		DrawRect(640,480,ans,100,100,600,400);
+		
+		st = cvGetTickCount();
+		unsigned char *we = Resize(640,480,ans,1920,1080);
+		ed = cvGetTickCount();
+
+		std::cout<<"Cost Time is"<< (ed - st)/(cvGetTickFrequency()*1000)<<"ms"<<std::endl;
+
+		BGR2MAT(1920,1080,we);
 
 //		unsigned char *wemadefox =Flip_BGR(640,480,ans);		
 //		BGR2MAT(480,640,wemadefox);
 //
 //		unsigned char *crop = Crop_Image(640,480,ans,100,100,600,400);
 //		BGR2MAT(501,301,crop);
-
+	
+		free(we);
+		free(ans);
 		free(data);
 	}
 	
-
 	return 0;
 }
