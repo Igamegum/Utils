@@ -2,9 +2,26 @@
 #include <Eigen/Dense>
 #include <assert.h>
 
+#define debug_msg std::cerr<<__FUNCTION__<<"  "<<__LINE__<<std::endl
+
+void Display(Eigen::MatrixXd X ,std::string name = "")
+{
+	std::cout<<std::endl<<"***************";
+	std::cout<<name;
+	std::cout<<"***************Start"<<std::endl;
+	
+	std::cout<<X<<std::endl;
+
+	std::cout<<"***************";
+	std::cout<<name;
+	std::cout<<"***************End"<<std::endl<<std::endl;
+
+
+
+}
 typedef struct 
 {
-	Eigen::MatrixXd trans;
+	std::pair<Eigen::MatrixXd ,Eigen::MatrixXd> trans;
 	std::pair<double,double> uvShift;
 	std::pair<double,double> xyShift;
 }DataResult;
@@ -27,7 +44,7 @@ struct EigenPack
 
 	Eigen::MatrixXd Pseudo_inverse(const Eigen::MatrixXd);
 
-	std::pair<Eigen::MatrixXd,Eigen::MatrixXd> MakeForm(Eigen::MatrixXd);
+	std::pair<Eigen::MatrixXd,Eigen::MatrixXd> MakeForm(Eigen::MatrixXd,Eigen::MatrixXd );
 
 	double Condiction(const Eigen::MatrixXd);
 
@@ -41,7 +58,7 @@ DataResult EigenPack::Acquaintance_transformation(const Eigen::MatrixXd A,
 											const int K) {
 //	if(A.cols() != 2 || A.rows() >= K || B.cols() !=2 || B.rows() >= K) return ;
 
-	assert(A.cols() == 2 && A.rows() < K && B.cols() ==2 && B.rows() == K);
+	assert(A.cols() == 2 && A.rows() >= K && B.cols() ==2 && B.rows() >= K);
 
 	std::pair<double,double> compensate_A;
 	std::pair<double,double> compensate_B;
@@ -54,21 +71,28 @@ DataResult EigenPack::Acquaintance_transformation(const Eigen::MatrixXd A,
 
 	EMM	nrt_one = Non_reflecting_transformation(A_shift,B_shift,2);
 
+
+
+
 	Eigen::MatrixXd A_y = A;
 	Eigen::MatrixXd B_y = B;
 	for(int i = 0; i < A_y.rows(); ++i){
 		A_y(i,0) *= -1.0 ;
 	}
-	for(int i = 0; i < B_y.rows(); ++i){
-		B_y(i,0) *= -1.0 ;
-	}
+	/* for(int i = 0; i < B_y.rows(); ++i){ */
+	/* 	B_y(i,0) *= -1.0 ; */
+	/* } */
 
 	EMM nrt_two = Non_reflecting_transformation(A_y,B_y,2);
+	
 
 	Eigen::MatrixXd TreflectY = Eigen::MatrixXd::Identity(3,3);
 	TreflectY(0,0) = -1.0;
 
-	EMM trans_two = MakeForm(nrt_two.first * TreflectY);
+
+	EMM trans_two = MakeForm(nrt_two.first * TreflectY,Pseudo_inverse(nrt_two.first * TreflectY));
+
+	
 
 	Eigen::MatrixXd re_one = Reflecting_transformation(A_shift,nrt_one.first);
 
@@ -80,9 +104,9 @@ DataResult EigenPack::Acquaintance_transformation(const Eigen::MatrixXd A,
 
 	DataResult result;
 	if(normal_1 <= normal_2){
-		result.trans = nrt_one.first;
+		result.trans = nrt_one;
 	}else{
-		result.trans = trans_two.first;
+		result.trans = trans_two;
 	}
 
 	result.uvShift = compensate_A;
@@ -93,6 +117,7 @@ DataResult EigenPack::Acquaintance_transformation(const Eigen::MatrixXd A,
 
 double EigenPack::Singular_value(const Eigen::MatrixXd X)
 {
+
 	if(X.cols() == 1 || X.rows() == 1){
 		
 		double sum = 0.0;
@@ -133,19 +158,21 @@ Eigen::MatrixXd EigenPack::Reflecting_transformation(const Eigen::MatrixXd X,con
 		{
 			E(i,j) = X(i,j);
 		}
-		E(i,X.cols() + 1) = 1;
+		E(i,X.cols()) = 1;
 	}
 
+
 	Eigen::MatrixXd U_res = E * M;
-	Eigen::MatrixXd U (U_res.rows(),U_res.cols());
+	Eigen::MatrixXd U (U_res.rows(),U_res.cols() - 1);
 
 	for(int i = 0; i < U.rows(); ++i)
 	{
-		for(int j = 0; j < U.cols(); ++j)
+		for(int j = 0; j < U.cols() - 1; ++j)
 		{
 			U(i,j) = U_res(i,j);
 		}
 	}
+
 
 	return U;
 }
@@ -205,7 +232,7 @@ Eigen::VectorXd EigenPack::Cons_vector(const Eigen::MatrixXd X)
 		ans(i) = X(i,0);
 	}
 	for(int i = X.rows(); i < X.rows() * 2 ; ++i){
-		ans(i) = X(i,1);
+		ans(i) = X(i - X.rows(),1);
 	}
 
 	return ans;
@@ -224,28 +251,54 @@ Eigen::MatrixXd EigenPack::Next_matrix(const Eigen::MatrixXd X)
 
 	for(int i = X.rows(); i < X.rows() * 2 ; ++i)
 	{
-		ans(i,0) = X(i,1);
-		ans(i,1) = -1.0 * X(i,0);
+		ans(i,0) = X(i - X.rows(),1);
+		ans(i,1) = -1.0 * X(i - X.rows(),0);
 		ans(i,2) = 0;
 		ans(i,3) = 1;
 	}
+
+	/* std::cout<<"X below as"<<std::endl; */
+	/* std::cout<<X<<std::endl; */
+	/* std::cout<<"ans below as"<<std::endl; */
+	/* std::cout<<ans<<std::endl; */
 
 	return ans;
 }
 int EigenPack::Rank(const Eigen::MatrixXd X)
 {
-	Eigen::EigenSolver<Eigen::MatrixXd> es(X);
 
-	Eigen::EigenSolver<Eigen::MatrixXd>::EigenvalueType  values = es.eigenvalues();
 
-	int Count = 0;
-	for(int i = 0 ; i < values.rows(); ++i)
+	/* Eigen::EigenSolver<Eigen::MatrixXd> es(X); */
+
+	/* Eigen::EigenSolver<Eigen::MatrixXd>::EigenvalueType  values = es.eigenvalues(); */
+
+	/* int Count = 0; */
+
+	/* std::cerr<<"rows "<<values.rows()<<"  cols "<<values.cols()<<std::endl; */
+
+	/* for(int i = 0 ; i < values.rows(); ++i) */
+	/* { */
+	/* 	for(int j = 0; j < values.cols(); ++j) */
+	/* 	{ */
+	/* 		if(values(i,j) != 0.0){ */
+	/* 			++Count; break; */
+	/* 		} */
+	/* 	} */
+	/* } */
+
+	typedef Eigen::Matrix<double, Eigen::Dynamic, Eigen::Dynamic, Eigen::RowMajor> Matxd;
+	Eigen::JacobiSVD<Matxd> svd(X,Eigen::ComputeFullU | Eigen::ComputeFullV);
+
+	double eps = 1e-8;
+
+	Matxd singularValues_inv = svd.singularValues();
+	int Count = 0;	
+
+	for(long i = 0; i < X.cols(); ++i)
 	{
-		for(int j = 0; j < values.cols(); ++j)
+		if(singularValues_inv(i) > eps)
 		{
-			if(values(i,j) != 0.0){
-				++Count; break;
-			}
+			++Count;
 		}
 	}
 
@@ -257,10 +310,10 @@ Eigen::MatrixXd EigenPack::Pseudo_inverse(const Eigen::MatrixXd X)
 {
 	typedef Eigen::Matrix<double,Eigen::Dynamic,Eigen::Dynamic,Eigen::RowMajor> Matxd;
 
-	Eigen::JacobiSVD<Matxd> svd(X,Eigen::ComputeFullU | Eigen::ComputeFullV);
 
 	double eps = 1e-8;
 
+	Eigen::JacobiSVD<Matxd> svd(X,Eigen::ComputeFullU | Eigen::ComputeFullV);
 	Matxd singularValues_inv = svd.singularValues();
 	
 	for(long i = 0; i < X.cols(); ++i)
@@ -273,7 +326,33 @@ Eigen::MatrixXd EigenPack::Pseudo_inverse(const Eigen::MatrixXd X)
 		}
 	}
 
-	Matxd result = svd.matrixV()*singularValues_inv.asDiagonal()*svd.matrixU().transpose();
+
+	
+	Matxd fixed(svd.matrixV().cols(),svd.matrixU().rows());
+
+	Matxd input = singularValues_inv.asDiagonal();
+
+	for(int i = 0; i < input.rows(); ++i)
+	{
+		for(int j = 0; j < input.cols(); ++j)
+		{
+			fixed(i,j) = input(i,j);
+		}
+	}
+
+	for(int i = input.cols(); i < fixed.cols(); ++i){
+		for(int j = 0; j < fixed.rows(); ++j){
+			fixed(j,i) = 0;
+		}
+	}
+	for(int i = input.rows(); i < fixed.rows(); ++i){
+		for(int j = 0; j < fixed.cols(); ++j){
+			fixed(i,j) = 0;
+		}
+	}
+
+//	Matxd result = svd.matrixV()*singularValues_inv.asDiagonal()*svd.matrixU().transpose();
+	Matxd result = svd.matrixV()*fixed*svd.matrixU().transpose();
 
 	Eigen::MatrixXd ans(result.rows(),result.cols());
 
@@ -289,10 +368,11 @@ Eigen::MatrixXd EigenPack::Pseudo_inverse(const Eigen::MatrixXd X)
 
 }
 
-std::pair<Eigen::MatrixXd , Eigen::MatrixXd> EigenPack::MakeForm(const Eigen::MatrixXd A)
+std::pair<Eigen::MatrixXd , Eigen::MatrixXd> EigenPack::MakeForm(Eigen::MatrixXd A,Eigen::MatrixXd A_inv)
 {
-	double min_eps = 1e-18;
-	double max_eps = 1e18;
+	double min_eps = -1e-10;
+	double max_eps = 1e10;
+
 
 	for(int i = 0; i < A.rows(); ++i)
 	{
@@ -310,7 +390,7 @@ std::pair<Eigen::MatrixXd , Eigen::MatrixXd> EigenPack::MakeForm(const Eigen::Ma
 
 	bool flag = true;
 	for(int i = 0 ; i < A.rows() -1 ; ++i){
-		if( A(i,A.cols() - 1) != 0 ){
+		if( A(i,A.cols() - 1) == 0 ){
 			flag = false; break;
 		}
 	}
@@ -323,7 +403,14 @@ std::pair<Eigen::MatrixXd , Eigen::MatrixXd> EigenPack::MakeForm(const Eigen::Ma
 		return std::make_pair(Eigen::MatrixXd::Zero(A.rows(),A.cols()),Eigen::MatrixXd::Zero(A.rows(),A.cols()));
 	}
 
-	return std::make_pair(A,Pseudo_inverse(A));
+	assert(A_inv.rows() >= 3 && A_inv.cols() >= 3);
+
+	
+	A_inv(0,2) = 0.0;
+	A_inv(1,2) = 0.0;
+	A_inv(2,2) = 1.0;
+
+	return std::make_pair(A,A_inv);
 }
 
 double EigenPack::Condiction(const Eigen::MatrixXd X )
@@ -358,13 +445,16 @@ std::pair<Eigen::MatrixXd,Eigen::MatrixXd> EigenPack::Non_reflecting_transformat
 											  const int K)
 {
 	Eigen::MatrixXd X = Next_matrix(A);
-	Eigen::VectorXd U = Cons_vector(A);
+	Eigen::VectorXd U = Cons_vector(B);
 
 	if(Rank(X) < 2 * K) {
 		return std::make_pair(Eigen::MatrixXd::Zero(A.rows(),A.cols()),Eigen::MatrixXd::Zero(A.rows(),A.cols()));
 	}
 
-	Eigen::MatrixXd R = U * Pseudo_inverse(X);
+
+
+	Eigen::MatrixXd R =  Pseudo_inverse(X) * U;
+
 
 	assert(R.cols() == 1);
 
@@ -376,13 +466,34 @@ std::pair<Eigen::MatrixXd,Eigen::MatrixXd> EigenPack::Non_reflecting_transformat
 
 	Eigen::MatrixXd Tinv = Pseudo_inverse(T);
 
-	assert(Tinv.rows() >= 3 && Tinv.cols() >= 3);
-	assert(Tinv(0,2) == 0 && Tinv(1,2) == 0 && Tinv(2,2) == 1);
 
-	return MakeForm(Tinv);
+	assert(Tinv.rows() >= 3 && Tinv.cols() >= 3);
+
+
+	
+	Tinv(0,2) = 0.0;
+	Tinv(1,2) = 0.0;
+	Tinv(2,2) = 1.0;
+	
+	return MakeForm(Tinv,T);
 
 }
 int main()
 {
+	Eigen::MatrixXd fixed(3,2);
+	fixed<<11,11,41,71,30,60;
+
+
+	Eigen::MatrixXd moving(3,2);
+	moving<<14,44,70,81,23,50;
+
+
+
+	EigenPack EP;
+	DataResult result = EP.Acquaintance_transformation(fixed,moving,3);
+
+	Display(result.trans.first,"Trans First");
+	Display(result.trans.second,"Trans Second");
+
 	return 0;
 }
