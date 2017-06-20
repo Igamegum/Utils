@@ -12,7 +12,29 @@
 //#include <jsoncpp/json.h>
 #include <glog/logging.h>
 
+std::time_t parseTime(const std::string time_stamp)
+{
+	struct tm  rtm;
 
+	strptime(time_stamp.c_str(), "%Y-%m-%d %H:%M:%S", &rtm);
+
+	std::time_t ans = mktime(&rtm);
+	return ans;
+}
+
+std::string getTimeStamp() 
+{
+	std::time_t rawtime;
+	long long currentTime = time(&rawtime);
+
+	struct tm tm = *localtime((time_t *)&currentTime);
+	char res[30];
+	strftime(res, 29, "%Y-%m-%d %H:%M:%S", &tm);
+	res[29] = '\0';
+
+	std::string result = res;
+	return result;
+}
 
 int get_return_code(zframe_t *self)
 {
